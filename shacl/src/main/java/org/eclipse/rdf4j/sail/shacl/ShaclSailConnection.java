@@ -20,6 +20,10 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDF4J;
+import org.eclipse.rdf4j.query.BindingSet;
+import org.eclipse.rdf4j.query.Dataset;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.algebra.TupleExpr;
 import org.eclipse.rdf4j.query.algebra.evaluation.util.ValueComparator;
 import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.eclipse.rdf4j.repository.sail.SailRepositoryConnection;
@@ -41,6 +45,7 @@ import org.eclipse.rdf4j.sail.shacl.results.ValidationReport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -652,6 +657,7 @@ public class ShaclSailConnection extends NotifyingSailConnectionWrapper implemen
 	@Override
 	public CloseableIteration<? extends Statement, SailException> getStatements(Resource subj, IRI pred, Value obj,
 			boolean includeInferred, Resource... contexts) throws SailException {
+		
 		if (contexts.length == 1 && contexts[0].equals(RDF4J.SHACL_SHAPE_GRAPH)) {
 			return getCloseableIteration(shapesRepoConnection.getStatements(subj, pred, obj, includeInferred));
 		}
@@ -790,5 +796,20 @@ public class ShaclSailConnection extends NotifyingSailConnectionWrapper implemen
 
 		return new ShaclSailValidationException(validate).getValidationReport();
 	}
+	
+	@Override
+	public CloseableIteration<? extends BindingSet, QueryEvaluationException> evaluate(TupleExpr tupleExpr,
+			Dataset dataset, BindingSet bindings, boolean includeInferred) throws SailException {
+		
+		List<IRI> graphs = new ArrayList<IRI>();
+		graphs.addAll(dataset.getDefaultGraphs());
+		graphs.addAll(dataset.getNamedGraphs());
 
+		if (graphs.contains(RDF4J.SHACL_SHAPE_GRAPH)) {
+			return shapesRepoConnection.getSailConnection().evaluate(tupleExpr, null, bindings, includeInferred);
+		} else {
+			return super.evaluate(tupleExpr, dataset, bindings, includeInferred);
+		}
+		
+	}
 }
