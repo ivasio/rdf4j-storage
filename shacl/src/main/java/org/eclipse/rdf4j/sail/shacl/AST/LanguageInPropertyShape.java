@@ -27,28 +27,31 @@ import java.util.stream.Collectors;
 /**
  * @author Håvard Ottestad
  */
-public class LanguageInPropertyShape extends PathPropertyShape {
+public class LanguageInPropertyShape extends AbstractSimplePropertyShape {
 
 	private final Set<String> languageIn;
 	private static final Logger logger = LoggerFactory.getLogger(LanguageInPropertyShape.class);
 
 	LanguageInPropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape, boolean deactivated,
-			Resource path,
+			PathPropertyShape parent, Resource path,
 			Resource languageIn) {
-		super(id, connection, nodeShape, deactivated, path);
+		super(id, connection, nodeShape, deactivated, parent, path);
 
 		this.languageIn = toList(connection, languageIn).stream().map(Value::stringValue).collect(Collectors.toSet());
 	}
 
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
 		}
 
-		PlanNode invalidValues = StandardisedPlanHelper.getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
-				(parent) -> new LanguageInFilter(parent, languageIn), this, overrideTargetNode);
+		assert !negateSubPlans : "There are no subplans!";
+
+		PlanNode invalidValues = getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
+				(parent) -> new LanguageInFilter(parent, languageIn), this, overrideTargetNode, negateThisPlan);
 
 		if (printPlans) {
 			String planAsGraphvizDot = getPlanAsGraphvizDot(invalidValues, shaclSailConnection);
@@ -88,7 +91,7 @@ public class LanguageInPropertyShape extends PathPropertyShape {
 	public String toString() {
 		return "LanguageInPropertyShape{" +
 				"languageIn=" + Arrays.toString(languageIn.toArray()) +
-				", path=" + path +
+				", path=" + getPath() +
 				'}';
 	}
 }

@@ -23,29 +23,31 @@ import java.util.Objects;
 /**
  * @author Håvard Ottestad
  */
-public class DatatypePropertyShape extends PathPropertyShape {
+public class DatatypePropertyShape extends AbstractSimplePropertyShape {
 
 	private final Resource datatype;
 	private static final Logger logger = LoggerFactory.getLogger(DatatypePropertyShape.class);
 
 	DatatypePropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape, boolean deactivated,
-			Resource path,
+			PathPropertyShape parent, Resource path,
 			Resource datatype) {
-		super(id, connection, nodeShape, deactivated, path);
+		super(id, connection, nodeShape, deactivated, parent, path);
 
 		this.datatype = datatype;
 
 	}
 
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
 		}
+		assert !negateSubPlans : "There are no subplans!";
 
-		PlanNode invalidValues = StandardisedPlanHelper.getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
-				(parent) -> new DatatypeFilter(parent, datatype), this, overrideTargetNode);
+		PlanNode invalidValues = getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
+				(parent) -> new DatatypeFilter(parent, datatype), this, overrideTargetNode, negateThisPlan);
 
 		if (printPlans) {
 			String planAsGraphvizDot = getPlanAsGraphvizDot(invalidValues, shaclSailConnection);
@@ -85,7 +87,7 @@ public class DatatypePropertyShape extends PathPropertyShape {
 	public String toString() {
 		return "DatatypePropertyShape{" +
 				"datatype=" + datatype +
-				", path=" + path +
+				", path=" + getPath() +
 				'}';
 	}
 }

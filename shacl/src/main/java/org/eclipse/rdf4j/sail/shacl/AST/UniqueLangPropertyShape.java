@@ -8,8 +8,6 @@
 package org.eclipse.rdf4j.sail.shacl.AST;
 
 import org.eclipse.rdf4j.model.Resource;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.repository.sail.SailRepositoryConnection;
 import org.eclipse.rdf4j.sail.shacl.ShaclSailConnection;
 import org.eclipse.rdf4j.sail.shacl.SourceConstraintComponent;
@@ -36,12 +34,11 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 
 	private final boolean uniqueLang;
 	private static final Logger logger = LoggerFactory.getLogger(UniqueLangPropertyShape.class);
-	private static final ValueFactory vf = SimpleValueFactory.getInstance();
 
 	UniqueLangPropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape, boolean deactivated,
-			Resource path,
+			PathPropertyShape parent, Resource path,
 			boolean uniqueLang) {
-		super(id, connection, nodeShape, deactivated, path);
+		super(id, connection, nodeShape, deactivated, parent, path);
 
 		this.uniqueLang = uniqueLang;
 		assert uniqueLang : "uniqueLang should always be true";
@@ -49,16 +46,21 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 	}
 
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
 		}
 
+		assert !negateSubPlans : "There are no subplans!";
+		assert !negateThisPlan;
+		assert hasOwnPath();
+
 		if (overrideTargetNode != null) {
 			PlanNode relevantTargetsWithPath = new LoggingNode(
 					new BulkedExternalInnerJoin(overrideTargetNode.getPlanNode(),
-							shaclSailConnection, path.getQuery("?a", "?c", null), false),
+							shaclSailConnection, getPath().getQuery("?a", "?c", null), false, "?a", "?c"),
 					"");
 
 			PlanNode planNode = new NonUniqueTargetLang(relevantTargetsWithPath);
@@ -73,10 +75,10 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 
 		if (shaclSailConnection.stats.isBaseSailEmpty()) {
 			PlanNode addedTargets = new LoggingNode(
-					nodeShape.getPlanAddedStatements(shaclSailConnection, nodeShape, null),
+					nodeShape.getPlanAddedStatements(shaclSailConnection, null),
 					"");
 
-			PlanNode addedByPath = new LoggingNode(super.getPlanAddedStatements(shaclSailConnection, nodeShape, null),
+			PlanNode addedByPath = new LoggingNode(super.getPlanAddedStatements(shaclSailConnection, null),
 					"");
 
 			PlanNode innerJoin = new LoggingNode(
@@ -93,10 +95,10 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 
 		}
 
-		PlanNode addedTargets = new LoggingNode(nodeShape.getPlanAddedStatements(shaclSailConnection, nodeShape, null),
+		PlanNode addedTargets = new LoggingNode(nodeShape.getPlanAddedStatements(shaclSailConnection, null),
 				"");
 
-		PlanNode addedByPath = new LoggingNode(super.getPlanAddedStatements(shaclSailConnection, nodeShape, null), "");
+		PlanNode addedByPath = new LoggingNode(super.getPlanAddedStatements(shaclSailConnection, null), "");
 
 		addedByPath = new LoggingNode(nodeShape.getTargetFilter(shaclSailConnection, addedByPath), "");
 
@@ -108,7 +110,7 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 
 		PlanNode relevantTargetsWithPath = new LoggingNode(
 				new BulkedExternalInnerJoin(allRelevantTargets, shaclSailConnection,
-						path.getQuery("?a", "?c", null), false),
+						getPath().getQuery("?a", "?c", null), false, "?a", "?c"),
 				"");
 
 		PlanNode planNode = new NonUniqueTargetLang(relevantTargetsWithPath);
@@ -151,7 +153,7 @@ public class UniqueLangPropertyShape extends PathPropertyShape {
 	public String toString() {
 		return "UniqueLangPropertyShape{" +
 				"uniqueLang=" + uniqueLang +
-				", path=" + path +
+				", path=" + getPath() +
 				'}';
 	}
 }

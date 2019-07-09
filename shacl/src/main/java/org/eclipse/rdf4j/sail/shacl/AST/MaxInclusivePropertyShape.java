@@ -25,29 +25,31 @@ import java.util.Objects;
 /**
  * @author Håvard Ottestad
  */
-public class MaxInclusivePropertyShape extends PathPropertyShape {
+public class MaxInclusivePropertyShape extends AbstractSimplePropertyShape {
 
 	private final Literal maxInclusive;
 	private static final Logger logger = LoggerFactory.getLogger(MaxInclusivePropertyShape.class);
 
 	MaxInclusivePropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape,
-			boolean deactivated, Resource path, Literal maxInclusive) {
-		super(id, connection, nodeShape, deactivated, path);
+			boolean deactivated, PathPropertyShape parent, Resource path, Literal maxInclusive) {
+		super(id, connection, nodeShape, deactivated, parent, path);
 
 		this.maxInclusive = maxInclusive;
 
 	}
 
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
 		}
+		assert !negateSubPlans : "There are no subplans!";
 
-		PlanNode invalidValues = StandardisedPlanHelper.getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
+		PlanNode invalidValues = getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
 				(parent) -> new LiteralComparatorFilter(parent, maxInclusive, value -> value >= 0), this,
-				overrideTargetNode);
+				overrideTargetNode, negateThisPlan);
 
 		if (printPlans) {
 			String planAsGraphvizDot = getPlanAsGraphvizDot(invalidValues, shaclSailConnection);
@@ -87,7 +89,7 @@ public class MaxInclusivePropertyShape extends PathPropertyShape {
 	public String toString() {
 		return "MaxInclusivePropertyShape{" +
 				"maxInclusive=" + maxInclusive +
-				", path=" + path +
+				", path=" + getPath() +
 				'}';
 	}
 }

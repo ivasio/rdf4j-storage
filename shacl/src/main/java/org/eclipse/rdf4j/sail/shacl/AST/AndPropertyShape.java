@@ -12,9 +12,12 @@ import org.eclipse.rdf4j.repository.sail.SailRepositoryConnection;
 import org.eclipse.rdf4j.sail.SailConnection;
 import org.eclipse.rdf4j.sail.shacl.ShaclSailConnection;
 import org.eclipse.rdf4j.sail.shacl.SourceConstraintComponent;
+import org.eclipse.rdf4j.sail.shacl.planNodes.AggregateIteratorTypeOverride;
 import org.eclipse.rdf4j.sail.shacl.planNodes.EnrichWithShape;
+import org.eclipse.rdf4j.sail.shacl.planNodes.IteratorData;
 import org.eclipse.rdf4j.sail.shacl.planNodes.PlanNode;
 import org.eclipse.rdf4j.sail.shacl.planNodes.PlanNodeProvider;
+import org.eclipse.rdf4j.sail.shacl.planNodes.TrimTuple;
 import org.eclipse.rdf4j.sail.shacl.planNodes.UnionNode;
 import org.eclipse.rdf4j.sail.shacl.planNodes.Unique;
 import org.slf4j.Logger;
@@ -23,40 +26,90 @@ import org.slf4j.LoggerFactory;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * @author Håvard Ottestad
  */
-public class AndPropertyShape extends PropertyShape {
+public class AndPropertyShape extends PathPropertyShape {
 
-	private final List<List<PropertyShape>> and;
+	private final List<List<PathPropertyShape>> and;
 
 	private static final Logger logger = LoggerFactory.getLogger(AndPropertyShape.class);
 
 	AndPropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape, boolean deactivated,
-			Resource and) {
-		super(id, nodeShape, deactivated);
+			PathPropertyShape parent, Resource path, Resource and) {
+		super(id, connection, nodeShape, deactivated, parent, path);
 		this.and = toList(connection, and).stream()
-				.map(v -> Factory.getPropertyShapesInner(connection, nodeShape, (Resource) v))
+				.map(v -> Factory.getPropertyShapesInner(connection, nodeShape, (Resource) v, this))
 				.collect(Collectors.toList());
 
 	}
 
+	public AndPropertyShape(Resource id, NodeShape nodeShape, boolean deactivated, PathPropertyShape parent, Path path,
+			List<List<PathPropertyShape>> and) {
+		super(id, nodeShape, deactivated, parent, path);
+		this.and = and;
+	}
+
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
+		}
+
+		if (negateThisPlan) { // De Morgan's laws
+			OrPropertyShape orPropertyShape = new OrPropertyShape(getId(), nodeShape, deactivated, this, null,
+					and);
+
+			EnrichWithShape plan = (EnrichWithShape) orPropertyShape.getPlan(shaclSailConnection, printPlans,
+					overrideTargetNode, false, true);
+
+			return new EnrichWithShape(plan.getParent(), this);
+
+		}
+
+		if (and.stream().mapToLong(List::size).sum() == 1) {
+			PlanNode plan = and.get(0)
+					.get(0)
+					.getPlan(shaclSailConnection, false, overrideTargetNode, negateSubPlans, false);
+			return new EnrichWithShape(plan, this);
 		}
 
 		List<PlanNode> plans = and
 				.stream()
 				.flatMap(List::stream)
-				.map(shape -> shape.getPlan(shaclSailConnection, nodeShape, printPlans, overrideTargetNode))
+				.map(shape -> shape.getPlan(shaclSailConnection, printPlans, overrideTargetNode, negateSubPlans,
+						false))
 				.collect(Collectors.toList());
 
 		PlanNode unionPlan = unionAll(plans);
+
+		List<IteratorData> iteratorDataTypes = plans.stream()
+				.map(PlanNode::getIteratorDataType)
+				.distinct()
+				.collect(Collectors.toList());
+
+		IteratorData iteratorData = iteratorDataTypes.get(0);
+
+		if (iteratorDataTypes.size() > 1) {
+			iteratorData = IteratorData.aggregated;
+		}
+
+		if (iteratorData == IteratorData.tripleBased) {
+
+			if (childrenHasOwnPath()) {
+				iteratorData = IteratorData.aggregated;
+			}
+
+		}
+
+		if (iteratorData == IteratorData.aggregated) {
+			unionPlan = new AggregateIteratorTypeOverride(new Unique(new TrimTuple(unionPlan, 0, 1)));
+		}
 
 		return new EnrichWithShape(unionPlan, this);
 
@@ -111,4 +164,17 @@ public class AndPropertyShape extends PropertyShape {
 				'}';
 	}
 
+	public boolean childrenHasOwnPath() {
+		return and.stream().flatMap(a -> a.stream().map(PathPropertyShape::hasOwnPath)).anyMatch(a -> a);
+	}
+
+	@Override
+	public PlanNode getAllTargetsPlan(ShaclSailConnection shaclSailConnection, boolean negated) {
+		Optional<PlanNode> reduce = and.stream()
+				.flatMap(Collection::stream)
+				.map(a -> a.getAllTargetsPlan(shaclSailConnection, negated))
+				.reduce((a, b) -> new UnionNode(a, b));
+
+		return new Unique(reduce.get());
+	}
 }

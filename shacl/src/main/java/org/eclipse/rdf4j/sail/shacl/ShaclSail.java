@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.StampedLock;
 
 /**
@@ -138,7 +139,6 @@ public class ShaclSail extends NotifyingSailWrapper {
 
 	private List<NodeShape> nodeShapes = Collections.emptyList();
 
-	private static String SH_OR_UPDATE_QUERY;
 	private static String IMPLICIT_TARGET_CLASS_NODE_SHAPE;
 	private static String IMPLICIT_TARGET_CLASS_PROPERTY_SHAPE;
 	private static String PROPERTY_SHAPE_WITH_TARGET;
@@ -164,7 +164,6 @@ public class ShaclSail extends NotifyingSailWrapper {
 
 	static {
 		try {
-			SH_OR_UPDATE_QUERY = resourceAsString("shacl-sparql-inference/sh_or.rq");
 			IMPLICIT_TARGET_CLASS_NODE_SHAPE = resourceAsString(
 					"shacl-sparql-inference/implicitTargetClassNodeShape.rq");
 			IMPLICIT_TARGET_CLASS_PROPERTY_SHAPE = resourceAsString(
@@ -222,11 +221,19 @@ public class ShaclSail extends NotifyingSailWrapper {
 				SHACL.TARGET_SUBJECTS_OF,
 				SHACL.IN,
 				SHACL.UNIQUE_LANG,
+				SHACL.NOT,
 				SHACL.TARGET_OBJECTS_OF);
 	}
 
+	private final AtomicBoolean initialized = new AtomicBoolean(false);
+
 	@Override
 	public void initialize() throws SailException {
+		if (!initialized.compareAndSet(false, true)) {
+			// already initialized
+			return;
+		}
+
 		super.initialize();
 
 		if (getDataDir() != null) {
@@ -292,6 +299,9 @@ public class ShaclSail extends NotifyingSailWrapper {
 			shapesRepo.shutDown();
 			shapesRepo = null;
 		}
+
+		initialized.set(false);
+		nodeShapes = Collections.emptyList();
 		super.shutDown();
 	}
 
@@ -312,7 +322,6 @@ public class ShaclSail extends NotifyingSailWrapper {
 			prevSize = currentSize;
 			shaclSailConnection.prepareUpdate(IMPLICIT_TARGET_CLASS_PROPERTY_SHAPE).execute();
 			shaclSailConnection.prepareUpdate(IMPLICIT_TARGET_CLASS_NODE_SHAPE).execute();
-			shaclSailConnection.prepareUpdate(SH_OR_UPDATE_QUERY).execute();
 			shaclSailConnection.prepareUpdate(PROPERTY_SHAPE_WITH_TARGET).execute();
 			currentSize = shaclSailConnection.size();
 		} while (prevSize != currentSize);

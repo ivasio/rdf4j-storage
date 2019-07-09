@@ -27,29 +27,31 @@ import java.util.Set;
 /**
  * @author Håvard Ottestad
  */
-public class InPropertyShape extends PathPropertyShape {
+public class InPropertyShape extends AbstractSimplePropertyShape {
 
 	private final Set<Value> in;
 	private static final Logger logger = LoggerFactory.getLogger(InPropertyShape.class);
 
 	InPropertyShape(Resource id, SailRepositoryConnection connection, NodeShape nodeShape, boolean deactivated,
-			Resource path,
+			PathPropertyShape parent, Resource path,
 			Resource in) {
-		super(id, connection, nodeShape, deactivated, path);
+		super(id, connection, nodeShape, deactivated, parent, path);
 
 		this.in = new HashSet<>(toList(connection, in));
 
 	}
 
 	@Override
-	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, NodeShape nodeShape, boolean printPlans,
-			PlanNodeProvider overrideTargetNode) {
+	public PlanNode getPlan(ShaclSailConnection shaclSailConnection, boolean printPlans,
+			PlanNodeProvider overrideTargetNode, boolean negateThisPlan, boolean negateSubPlans) {
+
 		if (deactivated) {
 			return null;
 		}
+		assert !negateSubPlans : "There are no subplans!";
 
-		PlanNode invalidValues = StandardisedPlanHelper.getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
-				(parent) -> new ValueInFilter(parent, in), this, overrideTargetNode);
+		PlanNode invalidValues = getGenericSingleObjectPlan(shaclSailConnection, nodeShape,
+				(parent) -> new ValueInFilter(parent, in), this, overrideTargetNode, negateThisPlan);
 
 		if (printPlans) {
 			String planAsGraphvizDot = getPlanAsGraphvizDot(invalidValues, shaclSailConnection);
@@ -89,7 +91,7 @@ public class InPropertyShape extends PathPropertyShape {
 	public String toString() {
 		return "InPropertyShape{" +
 				"in=" + Arrays.toString(in.toArray()) +
-				", path=" + path +
+				", path=" + getPath() +
 				'}';
 	}
 }
