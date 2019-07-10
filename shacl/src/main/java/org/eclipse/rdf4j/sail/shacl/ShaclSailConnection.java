@@ -799,15 +799,18 @@ public class ShaclSailConnection extends NotifyingSailConnectionWrapper implemen
 	public CloseableIteration<? extends BindingSet, QueryEvaluationException> evaluate(TupleExpr tupleExpr,
 			Dataset dataset, BindingSet bindings, boolean includeInferred) throws SailException {
 		
-		List<IRI> graphs = new ArrayList<IRI>();
-		graphs.addAll(dataset.getDefaultGraphs());
-		graphs.addAll(dataset.getNamedGraphs());
-
-		if (graphs.contains(RDF4J.SHACL_SHAPE_GRAPH)) {
-			return shapesRepoConnection.getSailConnection().evaluate(tupleExpr, null, bindings, includeInferred);
-		} else {
+		if (dataset == null) {
 			return super.evaluate(tupleExpr, dataset, bindings, includeInferred);
+		} else {
+			List<IRI> graphs = new ArrayList<IRI>();
+			graphs.addAll(dataset.getDefaultGraphs());
+			graphs.addAll(dataset.getNamedGraphs());
+			
+			if (graphs.contains(RDF4J.SHACL_SHAPE_GRAPH)) {
+				return shapesRepoConnection.getSailConnection().evaluate(tupleExpr, null, bindings, includeInferred);
+			} else {
+				return super.evaluate(tupleExpr, dataset, bindings, includeInferred);
+			}
 		}
-		
 	}
 }
